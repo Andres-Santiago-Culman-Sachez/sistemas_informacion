@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan de implementación revisado para Motilón Motors: bitácora multi-prórroga con fecha de novedad, permiso exclusivo de Administrador para estado 'entregada'/'entregado', módulo integral de repuestos (registro, búsqueda, stock, proveedores, historial de movimientos y pedidos con estados 'en camino', 'en espera por stock', 'listo para entrega', 'entregado') y automatización de correos electrónicos para motos y repuestos.",
+  "updatedAt":  "2026-11-07T19:35:59.233373770Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

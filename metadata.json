@@ -1,0 +1,6 @@
+{
+  "name": "Motilón Motors - Taller y Repuestos",
+  "description": "Sistema web de gestión de mantenimiento de motos, repuestos, cotizaciones interactivas y seguimiento en tiempo real para Motilón Motors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
