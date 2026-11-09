@@ -32,7 +32,8 @@ async function seed() {
     INSERT INTO suppliers (name, contact_name, phone, email, address, notes) VALUES
     ('Distribuidora Motos del Norte', 'Roberto Cárdenas', '+57 300 888 1122', 'ventas@motosdelnorte.com', 'Calle 10 # 15-40, Cúcuta', 'Proveedor oficial repuestos Yamaha y Suzuki'),
     ('Repuestos y Cadenas Santandereanas', 'Marcela Díaz', '+57 314 555 3344', 'contacto@cadenasantander.co', 'Av. 5ta # 20-18, Bucaramanga', 'Especialista en kits de arrastre, frenos y suspensiones'),
-    ('Lubricantes & Filtros Colombia', 'Felipe Santos', '+57 320 777 9900', 'pedidos@lubrifiltros.com', 'Zona Industrial El Salado', 'Distribuidor Motul, Castrol y filtros de alto flujo');
+    ('Lubricantes & Filtros Colombia', 'Felipe Santos', '+57 320 777 9900', 'pedidos@lubrifiltros.com', 'Zona Industrial El Salado', 'Distribuidor Motul, Castrol y filtros de alto flujo')
+    ON CONFLICT (name) DO NOTHING;
   `);
   console.log('Suppliers seeded.');
 
@@ -155,6 +156,21 @@ async function seed() {
       (3, v_cli1, 'Andrés Santiago Culman', v_order1, 1, 320000, 'en espera por stock', 'Kit de arrastre solicitado para orden de MT-09 SP'),
       (1, v_cli1, 'Andrés Santiago Culman', NULL, 1, 110000, 'listo para entrega', 'Pastillas Brembo pedidas en mostrador por cliente'),
       (2, v_cli2, 'Valentina Gómez', NULL, 2, 78000, 'en camino', '2 envases de Motul 7100 en tránsito desde bodega');
+
+      -- Repair suggestion example for Order 1 (linked parts with stock > 0)
+      INSERT INTO repair_suggestions (work_order_id, mechanic_id, mechanic_name, description,
+        previous_labor_cost, previous_parts_cost, previous_total_estimate,
+        additional_labor_cost, additional_parts_cost,
+        new_labor_cost, new_parts_cost, new_total_estimate,
+        previous_estimated_delivery, new_estimated_delivery, status)
+      VALUES (
+        v_order1, v_mech1, 'Javier Méndez (Mecánico Senior)',
+        'Registro histórico migrado: reemplazo urgente kit de arrastre DID 520 y pastillas traseras.',
+        120000, 320000, 440000,
+        40000, 320000,
+        160000, 640000, 800000,
+        '2026-11-10', '2026-11-14', 'pendiente'
+      );
 
       -- Email logs
       INSERT INTO email_logs (to_email, to_name, subject, trigger_event, body_html, status, related_type, related_id)

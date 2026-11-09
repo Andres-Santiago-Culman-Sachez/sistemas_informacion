@@ -1,168 +1,246 @@
-import { 
-  User, 
-  Motorcycle, 
-  WorkOrder, 
-  Part, 
-  Supplier, 
-  StockMovement, 
-  PartRequest, 
-  EmailLog, 
-  MotorcycleStatus, 
-  PartRequestStatus 
+import {
+  User,
+  Motorcycle,
+  WorkOrder,
+  Part,
+  Supplier,
+  StockMovement,
+  PartRequest,
+  EmailLog,
+  MotorcycleStatus,
+  PartRequestStatus,
+  RepairSuggestion,
+  SupplierDeletePreview,
 } from '../types/index.ts';
 
 const API_BASE = '/api';
 
+const TOKEN_KEY = 'mm_token';
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // storage unavailable
+  }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // storage unavailable
+  }
+}
+
+export const tokenManager = {
+  getToken,
+  setToken,
+  clearToken,
+  key: TOKEN_KEY,
+};
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined && options.body !== null) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { ...headers, ...(options.headers as Record<string, string> | undefined) },
+  });
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+  if (!res.ok) {
+    const message =
+      (data && typeof data === 'object' && (data.error || data.message)) ||
+      (typeof data === 'string' && data) ||
+      `Error ${res.status}`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+export interface CreateWorkOrderInput {
+  motorcycleId?: number;
+  newMotorcycle?: Partial<Motorcycle> & {
+    plate: string;
+    brand: string;
+    model: string;
+    year: number;
+    color: string;
+    mileage: number;
+    clientId: number;
+  };
+  mechanicId?: number;
+  initialDiagnosis: string;
+  estimatedDelivery: string;
+  laborCost: number;
+  partsCost: number;
+  suggestedRepairs?: string;
+  clientId?: number;
+}
+
+export interface CreateRepairSuggestionInput {
+  description: string;
+  additionalLaborCost: number;
+  newEstimatedDelivery: string;
+  linkedParts?: Array<{ partId: number; quantity: number }>;
+  additionalPartsCost?: number;
+}
+
 export const api = {
+  getToken,
+  setToken,
+  clearToken,
+
   // Auth
-  async login(email: string, password: string): Promise<{ user: User }> {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+  async login(email: string, password: string): Promise<{ user: User; token: string }> {
+    const data = await request<{ user: User; token: string }>('/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+    if (data?.token) setToken(data.token);
     return data;
   },
 
+  async me(): Promise<{ user: User }> {
+    return request<{ user: User }>('/auth/me');
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await request('/auth/logout', { method: 'POST' });
+    } finally {
+      clearToken();
+    }
+  },
+
   async getUsers(role?: string): Promise<User[]> {
-    const url = role ? `${API_BASE}/users?role=${role}` : `${API_BASE}/users`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Error al cargar usuarios');
-    return res.json();
+    const url = role ? `/users?role=${encodeURIComponent(role)}` : '/users';
+    return request<User[]>(url);
   },
 
   // Motorcycles
   async getMotorcycles(): Promise<Motorcycle[]> {
-    const res = await fetch(`${API_BASE}/motorcycles`);
-    if (!res.ok) throw new Error('Error al cargar motocicletas');
-    return res.json();
+    return request<Motorcycle[]>('/motorcycles');
   },
 
   async createMotorcycle(data: Partial<Motorcycle>): Promise<Motorcycle> {
-    const res = await fetch(`${API_BASE}/motorcycles`, {
+    return request<Motorcycle>('/motorcycles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al crear motocicleta');
-    return json;
   },
 
   // Work Orders
   async getWorkOrders(): Promise<WorkOrder[]> {
-    const res = await fetch(`${API_BASE}/work-orders`);
-    if (!res.ok) throw new Error('Error al cargar órdenes de trabajo');
-    return res.json();
+    return request<WorkOrder[]>('/work-orders');
   },
 
-  async createWorkOrder(data: {
-    motorcycleId: number;
-    mechanicId?: number;
-    initialDiagnosis: string;
-    estimatedDelivery: string;
-    laborCost: number;
-    partsCost: number;
-    suggestedRepairs?: string;
-  }): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders`, {
+  async createWorkOrder(data: CreateWorkOrderInput): Promise<WorkOrder> {
+    return request<WorkOrder>('/work-orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al crear orden de trabajo');
-    return json;
   },
 
+  // Legacy extra params kept for dashboards compatibility; they are NOT sent in body.
   async updateOrderStatus(
-    orderId: number, 
-    status: MotorcycleStatus, 
-    userRole: string,
-    userName?: string
+    orderId: number,
+    status: MotorcycleStatus,
+    _userRole?: string,
+    _userName?: string,
   ): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/status`, {
+    void _userRole;
+    void _userName;
+    return request<WorkOrder>(`/work-orders/${orderId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, userRole, userName }),
+      body: JSON.stringify({ status }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al actualizar estado');
-    return json;
   },
 
   async postponeOrder(
-    orderId: number, 
-    newDate: string, 
-    reason: string, 
-    mechanicId?: number, 
-    mechanicName?: string
-  ): Promise<any> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/postpone`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newDate, reason, mechanicId, mechanicName }),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al aplazar entrega');
-    return json;
-  },
-
-  async suggestRepairs(
     orderId: number,
-    suggestedRepairs: string,
-    additionalLabor: number,
-    additionalParts: number
-  ): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/suggest-repairs`, {
+    newDate: string,
+    reason: string,
+    _mechanicId?: number,
+    _mechanicName?: string,
+  ): Promise<any> {
+    void _mechanicId;
+    void _mechanicName;
+    return request<any>(`/work-orders/${orderId}/postpone`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ suggestedRepairs, additionalLabor, additionalParts }),
+      body: JSON.stringify({ newDate, reason }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al enviar diagnóstico');
-    return json;
   },
 
-  async authorizeRepairs(orderId: number): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/authorize`, {
-      method: 'POST',
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al autorizar reparación');
-    return json;
+  async getRepairSuggestions(orderId: number): Promise<RepairSuggestion[]> {
+    return request<RepairSuggestion[]>(`/work-orders/${orderId}/repair-suggestions`);
   },
 
-  async rejectRepairs(orderId: number): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/reject`, {
+  async createRepairSuggestion(
+    orderId: number,
+    data: CreateRepairSuggestionInput,
+  ): Promise<RepairSuggestion> {
+    return request<RepairSuggestion>(`/work-orders/${orderId}/repair-suggestions`, {
       method: 'POST',
+      body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al rechazar reparación');
-    return json;
   },
 
-  async deliverOrder(orderId: number, userRole: string): Promise<WorkOrder> {
-    const res = await fetch(`${API_BASE}/work-orders/${orderId}/deliver`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userRole }),
+  async authorizeRepairSuggestion(suggestionId: number): Promise<RepairSuggestion> {
+    return request<RepairSuggestion>(`/repair-suggestions/${suggestionId}/authorize`, {
+      method: 'PATCH',
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al entregar motocicleta');
-    return json;
   },
+
+  async rejectRepairSuggestion(suggestionId: number): Promise<RepairSuggestion> {
+    return request<RepairSuggestion>(`/repair-suggestions/${suggestionId}/reject`, {
+      method: 'PATCH',
+    });
+  },
+
+  async deliverOrder(orderId: number, _userRole?: string): Promise<WorkOrder> {
+    void _userRole;
+    return request<WorkOrder>(`/work-orders/${orderId}/deliver`, {
+      method: 'POST',
+    });
+  },
+
+  // Endpoints legacy /work-orders/:id/suggest-repairs|authorize|reject
+  // eliminados; se usan authorizeRepairSuggestion/rejectRepairSuggestion por id.
 
   // Parts
-  async getParts(search?: string, category?: string): Promise<Part[]> {
+  async getParts(search?: string, category?: string, inStock?: boolean): Promise<Part[]> {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (category) params.append('category', category);
-    const res = await fetch(`${API_BASE}/parts?${params.toString()}`);
-    if (!res.ok) throw new Error('Error al cargar repuestos');
-    return res.json();
+    if (inStock) params.append('inStock', 'true');
+    const qs = params.toString();
+    return request<Part[]>(qs ? `/parts?${qs}` : '/parts');
   },
 
   async createPart(data: {
@@ -177,14 +255,19 @@ export const api = {
     supplierId?: number;
     userName?: string;
   }): Promise<Part> {
-    const res = await fetch(`${API_BASE}/parts`, {
+    const { userName: _userName, ...body } = data;
+    void _userName;
+    return request<Part>('/parts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
+
+  async updatePart(data: Partial<Part> & { id: number }): Promise<Part> {
+    return request<Part>('/parts', {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al registrar repuesto');
-    return json;
   },
 
   async updateStock(
@@ -192,51 +275,54 @@ export const api = {
     type: 'entrada' | 'salida',
     quantity: number,
     reason: string,
-    userId?: number,
-    userName?: string
+    _userId?: number,
+    _userName?: string,
   ): Promise<any> {
-    const res = await fetch(`${API_BASE}/parts/${partId}/stock`, {
+    void _userId;
+    void _userName;
+    return request<any>(`/parts/${partId}/stock`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, quantity, reason, userId, userName }),
+      body: JSON.stringify({ type, quantity, reason }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al actualizar stock');
-    return json;
   },
 
   // Suppliers
   async getSuppliers(): Promise<Supplier[]> {
-    const res = await fetch(`${API_BASE}/suppliers`);
-    if (!res.ok) throw new Error('Error al cargar proveedores');
-    return res.json();
+    return request<Supplier[]>('/suppliers');
   },
 
   async createSupplier(data: Partial<Supplier>): Promise<Supplier> {
-    const res = await fetch(`${API_BASE}/suppliers`, {
+    return request<Supplier>('/suppliers', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al registrar proveedor');
-    return json;
+  },
+
+  async updateSupplier(id: number, data: Partial<Supplier>): Promise<Supplier> {
+    return request<Supplier>(`/suppliers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getSupplierDeletePreview(id: number): Promise<SupplierDeletePreview> {
+    return request<SupplierDeletePreview>(`/suppliers/${id}/delete-preview`);
+  },
+
+  async deleteSupplier(id: number): Promise<void> {
+    await request<void>(`/suppliers/${id}`, { method: 'DELETE' });
   },
 
   // Stock movements
   async getStockMovements(partId?: number): Promise<StockMovement[]> {
-    const url = partId ? `${API_BASE}/stock-movements?partId=${partId}` : `${API_BASE}/stock-movements`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Error al cargar movimientos de stock');
-    return res.json();
+    const url = partId ? `/stock-movements?partId=${partId}` : '/stock-movements';
+    return request<StockMovement[]>(url);
   },
 
   // Part requests
   async getPartRequests(clientId?: number): Promise<PartRequest[]> {
-    const url = clientId ? `${API_BASE}/part-requests?clientId=${clientId}` : `${API_BASE}/part-requests`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Error al consultar pedidos de repuestos');
-    return res.json();
+    const url = clientId ? `/part-requests?clientId=${clientId}` : '/part-requests';
+    return request<PartRequest[]>(url);
   },
 
   async createPartRequest(data: {
@@ -246,35 +332,42 @@ export const api = {
     notes?: string;
     workOrderId?: number;
   }): Promise<PartRequest> {
-    const res = await fetch(`${API_BASE}/part-requests`, {
+    return request<PartRequest>('/part-requests', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al solicitar repuesto');
-    return json;
   },
 
   async updatePartRequestStatus(
-    requestId: number, 
-    status: PartRequestStatus, 
-    userRole: string
+    requestId: number,
+    status: PartRequestStatus,
+    _userRole?: string,
   ): Promise<PartRequest> {
-    const res = await fetch(`${API_BASE}/part-requests/${requestId}/status`, {
+    void _userRole;
+    return request<PartRequest>(`/part-requests/${requestId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, userRole }),
+      body: JSON.stringify({ status }),
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Error al actualizar estado del pedido');
-    return json;
   },
 
   // Emails
   async getEmailLogs(): Promise<EmailLog[]> {
-    const res = await fetch(`${API_BASE}/emails`);
-    if (!res.ok) throw new Error('Error al cargar registros de correo');
-    return res.json();
+    return request<EmailLog[]>('/emails');
+  },
+
+  async getUnreadEmailCount(): Promise<{ unread: number }> {
+    return request<{ unread: number }>('/emails/unread-count');
+  },
+
+  async markEmailRead(id: number): Promise<{ ok: boolean; isRead: boolean }> {
+    return request<{ ok: boolean; isRead: boolean }>(`/emails/${id}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  async markAllEmailsRead(): Promise<{ ok: boolean }> {
+    return request<{ ok: boolean }>('/emails/read-all', {
+      method: 'PATCH',
+    });
   },
 };

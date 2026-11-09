@@ -23,6 +23,8 @@ export type PartRequestStatus =
   | 'listo para entrega'
   | 'entregado';
 
+export type RepairSuggestionStatus = 'pendiente' | 'aprobada' | 'rechazada';
+
 export interface Motorcycle {
   id: number;
   plate: string;
@@ -47,6 +49,40 @@ export interface PostponementLog {
   createdAt: string; // Fecha de la novedad
 }
 
+export interface RepairSuggestionPart {
+  id: number;
+  suggestionId: number;
+  partId: number;
+  partName: string;
+  partCode: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface RepairSuggestion {
+  id: number;
+  workOrderId: number;
+  mechanicId?: number;
+  mechanicName: string;
+  description: string;
+  previousLaborCost: number;
+  previousPartsCost: number;
+  previousTotalEstimate: number;
+  additionalLaborCost: number;
+  additionalPartsCost: number;
+  newLaborCost: number;
+  newPartsCost: number;
+  newTotalEstimate: number;
+  previousEstimatedDelivery: string;
+  newEstimatedDelivery: string;
+  status: RepairSuggestionStatus;
+  respondedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  parts?: RepairSuggestionPart[];
+}
+
 export interface WorkOrder {
   id: number;
   motorcycleId: number;
@@ -60,21 +96,24 @@ export interface WorkOrder {
   laborCost: number;
   partsCost: number;
   totalEstimate: number;
+  deliveredAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
   // Populated fields
   motorcycle?: Motorcycle;
   postponements?: PostponementLog[];
+  repairSuggestions?: RepairSuggestion[];
 }
 
 export interface Supplier {
   id: number;
   name: string;
-  contactName?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  address: string;
   notes?: string;
+  visible?: boolean;
   createdAt?: string;
 }
 
@@ -134,5 +173,12 @@ export interface EmailLog {
   status: string;
   relatedType?: 'work_order' | 'part_request';
   relatedId?: number;
+  isRead?: boolean;
   createdAt: string;
+}
+
+export interface SupplierDeletePreview {
+  supplier: Supplier;
+  totalParts: number;
+  partsWithStock: Array<{ code: string; stock: number }>;
 }

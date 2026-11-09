@@ -1,6 +1,6 @@
 import React from 'react';
-import { User, UserRole } from '../types/index.ts';
-import { Mail, Wrench, Crown, User as UserIcon, LogOut, Sun, Moon, Database } from 'lucide-react';
+import { User } from '../types/index.ts';
+import { Mail, LogOut, Sun, Moon, Database } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: 'orders' | 'parts' | 'neon' | 'client-view';
@@ -12,7 +12,6 @@ interface NavbarProps {
   emailCount: number;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
-  onQuickSwitchRole: (role: UserRole) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -25,8 +24,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   emailCount,
   darkMode,
   setDarkMode,
-  onQuickSwitchRole,
 }) => {
+  const isAdmin = currentUser?.role === 'admin';
+  const canSeeParts = currentUser != null && currentUser.role !== 'client';
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 sm:px-8 py-3 flex items-center justify-between gap-8">
       
@@ -57,31 +57,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           Mantenimiento
         </button>
 
-        <button
-          onClick={() => setActiveTab('parts')}
-          className={`hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
-            activeTab === 'parts' 
-              ? 'border-amber-500 text-amber-600 dark:text-amber-400' 
-              : 'border-transparent'
-          }`}
-        >
-          Repuestos & Stock
-        </button>
+        {canSeeParts && (
+          <button
+            onClick={() => setActiveTab('parts')}
+            className={`hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 ${
+              activeTab === 'parts' 
+                ? 'border-amber-500 text-amber-600 dark:text-amber-400' 
+                : 'border-transparent'
+            }`}
+          >
+            Repuestos & Stock
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('neon')}
-          className={`hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 flex items-center gap-1 ${
-            activeTab === 'neon' 
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' 
-              : 'border-transparent'
-          }`}
-        >
-          <Database className="w-3.5 h-3.5 text-emerald-500" />
-          Neon Cloud
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('neon')}
+            className={`hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 pb-1 border-b-2 flex items-center gap-1 ${
+              activeTab === 'neon' 
+                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' 
+                : 'border-transparent'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5 text-emerald-500" />
+            Neon Cloud
+          </button>
+        )}
       </nav>
 
-      {/* Zone 3: Primary Actions, Role Switcher & Notifications */}
+      {/* Zone 3: Primary Actions & Notifications */}
       <div className="flex items-center gap-3 shrink-0">
         
         {/* Dark/Light mode toggle */}
@@ -110,44 +114,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Role Selector & User Profile */}
         {currentUser ? (
           <div className="flex items-center gap-2">
-            
-            {/* Quick Role Switcher Pill */}
-            <div className="hidden sm:flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-2xs">
-              <button
-                onClick={() => onQuickSwitchRole('admin')}
-                className={`px-2 py-0.5 rounded transition-colors ${
-                  currentUser.role === 'admin'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-                title="Cambiar a Administrador"
-              >
-                Admin
-              </button>
-              <button
-                onClick={() => onQuickSwitchRole('mechanic')}
-                className={`px-2 py-0.5 rounded transition-colors ${
-                  currentUser.role === 'mechanic'
-                    ? 'bg-blue-600 text-white font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-                title="Cambiar a Mecánico Senior"
-              >
-                Mecánico
-              </button>
-              <button
-                onClick={() => onQuickSwitchRole('client')}
-                className={`px-2 py-0.5 rounded transition-colors ${
-                  currentUser.role === 'client'
-                    ? 'bg-emerald-600 text-white font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-                title="Cambiar a Cliente Propietario"
-              >
-                Cliente
-              </button>
-            </div>
-
             {/* User display */}
             <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-slate-800">
               <div className="text-right hidden sm:block">

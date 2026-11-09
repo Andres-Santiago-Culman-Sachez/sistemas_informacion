@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { User, WorkOrder, Motorcycle, PartRequest, EmailLog, UserRole } from './types/index.ts';
-import { api } from './services/api.ts';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, WorkOrder, Motorcycle, PartRequest, EmailLog } from './types/index.ts';
+import { api, getToken, clearToken } from './services/api.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { AdminDashboard } from './components/admin/AdminDashboard.tsx';
 import { MechanicDashboard } from './components/mechanic/MechanicDashboard.tsx';
@@ -14,29 +14,15 @@ import { PartsModule } from './components/parts/PartsModule.tsx';
 import { NeonCloudStatus } from './components/NeonCloudStatus.tsx';
 import { NotificationDrawer } from './components/NotificationDrawer.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
+import heroImage from './assets/images/motilon_workshop_hero_1794080587609.jpg';
 import { 
   Wrench, 
   Package, 
   Database, 
-  Crown, 
-  User as UserIcon, 
-  ShieldCheck, 
-  Calendar, 
-  CheckCircle2, 
-  Clock, 
-  Sparkles,
-  ArrowRight
 } from 'lucide-react';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>({
-    id: 1,
-    uid: 'usr_admin_1',
-    name: 'Carlos Motilón (Administrador)',
-    email: 'admin@motilonmotors.com',
-    role: 'admin',
-    phone: '+57 300 123 4567',
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'parts' | 'neon' | 'client-view'>('orders');
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -44,11 +30,12 @@ export default function App() {
   const [mechanics, setMechanics] = useState<User[]>([]);
   const [partRequests, setPartRequests] = useState<PartRequest[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   // Sync dark class on document root
   useEffect(() => {
@@ -59,7 +46,7 @@ export default function App() {
     }
   }, [darkMode]);
 
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     try {
       setLoading(true);
       const [ordData, motoData, usersData, reqData, emailData] = await Promise.all([
@@ -79,43 +66,71 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadAllData();
   }, []);
 
-  const handleQuickSwitchRole = (role: UserRole) => {
-    if (role === 'admin') {
-      setCurrentUser({
-        id: 1,
-        uid: 'usr_admin_1',
-        name: 'Carlos Motilón (Administrador)',
-        email: 'admin@motilonmotors.com',
-        role: 'admin',
-      });
-      setActiveTab('orders');
-    } else if (role === 'mechanic') {
-      setCurrentUser({
-        id: 2,
-        uid: 'usr_mech_1',
-        name: 'Javier Méndez (Mecánico Senior)',
-        email: 'mecanico@motilonmotors.com',
-        role: 'mechanic',
-      });
-      setActiveTab('orders');
-    } else {
-      setCurrentUser({
-        id: 4,
-        uid: 'usr_cli_1',
-        name: 'Andrés Santiago Culman',
-        email: 'cliente@motilonmotors.com',
-        role: 'client',
-        phone: '+57 310 456 7890',
-      });
+  // Restore session (TTL 10min, no refresh) from stored token.
+  useEffect(() => {
+    const restore = async () => {
+      if (getToken()) {
+        try {
+          const { user } = await api.me();
+          setCurrentUser(user);
+        } catch {
+          clearToken();
+          setCurrentUser(null);
+        } finally {
+          setSessionChecked(true);
+        }
+      } else {
+        setSessionChecked(true);
+      }
+    };
+    restore();
+  }, []);
+
+  // Mandatory login when there is no session.
+  useEffect(() => {
+    if (sessionChecked && !currentUser) {
+      setIsAuthModalOpen(true);
+    }
+  }, [sessionChecked, currentUser]);
+
+  // Load data only once a user is authenticated.
+  useEffect(() => {
+    if (currentUser) {
+      loadAllData();
+    }
+  }, [currentUser, loadAllData]);
+
+  // Role-based tab guards: Neon only for admin, Parts not for clients.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role !== 'admin' && activeTab === 'neon') {
       setActiveTab('orders');
     }
+    if (currentUser.role === 'client' && activeTab === 'parts') {
+      setActiveTab('orders');
+    }
+  }, [currentUser, activeTab]);
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      clearToken();
+    } finally {
+      setCurrentUser(null);
+      setEmailLogs([]);
+      setOrders([]);
+      setMotorcycles([]);
+      setMechanics([]);
+      setPartRequests([]);
+      setActiveTab('orders');
+      setIsNotificationsOpen(false);
+    }
   };
+
+  const unreadCount = emailLogs.filter((e) => !e.isRead).length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors">
@@ -126,67 +141,19 @@ export default function App() {
         setActiveTab={setActiveTab}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
-        onLogout={() => setCurrentUser(null)}
+        onLogout={handleLogout}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
-        emailCount={emailLogs.length}
+        emailCount={unreadCount}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
-        onQuickSwitchRole={handleQuickSwitchRole}
       />
-
-      {/* Role Indicator Banner */}
-      <div className="bg-slate-900 text-white dark:bg-slate-950 border-b border-slate-800 px-4 py-2 text-2xs">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400">Rol activo:</span>
-            <span className={`font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider ${
-              currentUser?.role === 'admin' 
-                ? 'bg-amber-500 text-slate-950' 
-                : currentUser?.role === 'mechanic'
-                ? 'bg-blue-600 text-white'
-                : 'bg-emerald-600 text-white'
-            }`}>
-              {currentUser?.role === 'admin' ? '👑 Administrador' : currentUser?.role === 'mechanic' ? '🔧 Mecánico Senior' : '👤 Cliente Propietario'}
-            </span>
-            <span className="hidden sm:inline text-slate-400">· {currentUser?.name}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400 hidden md:inline">Simular otro perfil:</span>
-            <button
-              onClick={() => handleQuickSwitchRole('admin')}
-              className={`px-2 py-0.5 rounded text-2xs transition-colors ${
-                currentUser?.role === 'admin' ? 'bg-amber-500 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-300'
-              }`}
-            >
-              Admin
-            </button>
-            <button
-              onClick={() => handleQuickSwitchRole('mechanic')}
-              className={`px-2 py-0.5 rounded text-2xs transition-colors ${
-                currentUser?.role === 'mechanic' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
-              }`}
-            >
-              Mecánico
-            </button>
-            <button
-              onClick={() => handleQuickSwitchRole('client')}
-              className={`px-2 py-0.5 rounded text-2xs transition-colors ${
-                currentUser?.role === 'client' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
-              }`}
-            >
-              Cliente
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Hero Workshop Banner (only when viewing main orders) */}
       {activeTab === 'orders' && (
         <div className="relative border-b border-slate-200 dark:border-slate-800 bg-slate-900 text-white overflow-hidden">
           <div className="absolute inset-0 z-0 opacity-25 dark:opacity-30">
             <img 
-              src="/src/assets/images/motilon_workshop_hero_1794080587609.jpg" 
+              src={heroImage} 
               alt="Taller Motilón Motors" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -214,7 +181,12 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-6">
-        {loading ? (
+        {!sessionChecked ? (
+          <div className="py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
+            <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>Verificando sesión...</span>
+          </div>
+        ) : loading ? (
           <div className="py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
             <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
             <span>Cargando datos desde Neon Cloud PostgreSQL...</span>
@@ -272,28 +244,62 @@ export default function App() {
               </>
             )}
 
-            {/* TAB: REPUESTOS */}
+            {/* TAB: REPUESTOS (admin + mechanic only; blocked for clients) */}
             {activeTab === 'parts' && (
-              <div className="space-y-4">
-                <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Package className="w-5 h-5 text-amber-500" />
-                    Módulo de Gestión de Repuestos e Inventario
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Catálogo de repuestos, control de existencias, directorio de proveedores y pedidos de clientes
-                  </p>
+              currentUser && currentUser.role !== 'client' ? (
+                <div className="space-y-4">
+                  <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Package className="w-5 h-5 text-amber-500" />
+                      Módulo de Gestión de Repuestos e Inventario
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Catálogo de repuestos, control de existencias, directorio de proveedores y pedidos de clientes
+                    </p>
+                  </div>
+                  <PartsModule
+                    currentUser={currentUser}
+                    onRefreshData={loadAllData}
+                  />
                 </div>
-                <PartsModule
-                  currentUser={currentUser || { id: 1, uid: 'guest', name: 'Invitado', email: '', role: 'client' }}
-                  onRefreshData={loadAllData}
-                />
-              </div>
+              ) : (
+                <div className="p-12 text-center border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-xs max-w-lg mx-auto space-y-4">
+                  <Package className="w-10 h-10 text-amber-500 mx-auto" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Acceso restringido
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {currentUser
+                      ? 'El módulo de repuestos está disponible solo para administradores y mecánicos.'
+                      : 'Inicia sesión para acceder al módulo de repuestos.'}
+                  </p>
+                  {!currentUser && (
+                    <button
+                      onClick={() => setIsAuthModalOpen(true)}
+                      className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition-colors"
+                    >
+                      Abrir Ventana de Ingreso
+                    </button>
+                  )}
+                </div>
+              )
             )}
 
-            {/* TAB: NEON CLOUD */}
+            {/* TAB: NEON CLOUD (admin only) */}
             {activeTab === 'neon' && (
-              <NeonCloudStatus />
+              currentUser?.role === 'admin' ? (
+                <NeonCloudStatus />
+              ) : (
+                <div className="p-12 text-center border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-xs max-w-lg mx-auto space-y-4">
+                  <Database className="w-10 h-10 text-emerald-500 mx-auto" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Acceso restringido
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Neon Cloud está disponible solo para administradores.
+                  </p>
+                </div>
+              )
             )}
           </>
         )}
@@ -323,6 +329,7 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
+          setIsAuthModalOpen(false);
           loadAllData();
         }}
       />

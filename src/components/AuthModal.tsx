@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { User, UserRole } from '../types/index.ts';
+import { User } from '../types/index.ts';
 import { api } from '../services/api.ts';
-import { Lock, Mail, Key, ShieldCheck, User as UserIcon, Wrench, Crown, AlertCircle } from 'lucide-react';
+import { Lock, Mail, Key, AlertCircle } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -23,22 +23,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     setError(null);
     try {
       const { user } = await api.login(email, password);
-      onLoginSuccess(user);
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickDemo = async (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setLoading(true);
-    setError(null);
-    try {
-      const { user } = await api.login(demoEmail, demoPass);
       onLoginSuccess(user);
       onClose();
     } catch (err: any) {
@@ -117,48 +101,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           </button>
         </form>
 
-        {/* Quick Demo Switcher Section */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400 text-center">
-            Acceso Rápido para Pruebas del Prototipo
-          </p>
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('admin@motilonmotors.com', 'admin123')}
-              className="p-2 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-left transition-colors flex flex-col items-center justify-center text-center gap-1"
-            >
-              <Crown className="w-4 h-4 text-amber-600" />
-              <span className="font-bold text-2xs leading-tight">Administrador</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('mecanico@motilonmotors.com', 'mecanico123')}
-              className="p-2 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-left transition-colors flex flex-col items-center justify-center text-center gap-1"
-            >
-              <Wrench className="w-4 h-4 text-blue-600" />
-              <span className="font-bold text-2xs leading-tight">Mecánico Senior</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('cliente@motilonmotors.com', 'cliente123')}
-              className="p-2 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-left transition-colors flex flex-col items-center justify-center text-center gap-1"
-            >
-              <UserIcon className="w-4 h-4 text-emerald-600" />
-              <span className="font-bold text-2xs leading-tight">Cliente Propietario</span>
-            </button>
-          </div>
-        </div>
-
         <div className="text-center">
           <button
             type="button"
             onClick={onClose}
             className="text-2xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
-            Continuar explorando sin iniciar sesión
+            Cancelar
           </button>
         </div>
 

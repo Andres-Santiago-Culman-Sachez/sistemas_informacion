@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794241222258,
+      "tag": "0000_motilon_baseline",
+      "breakpoints": true
+    }
+  ]
+}
